@@ -6,5 +6,12 @@ import Dungeon
 
 main :: IO ()
 main = do
+	putStrLn $ "Creating game..."
+
 	g <- initGame
-	putStrLn $ show g
+
+	return ()
+
+	-- putStrLn $ "Printing game..."
+	-- 
+	-- putStrLn $ show g

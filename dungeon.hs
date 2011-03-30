@@ -56,6 +56,13 @@ data Item = Item {
 		itemAction :: ItemFunc
 	} deriving (Eq)
 
+player :: Item
+player = Item {
+		itemName = "Player",
+		itemShow = "@",
+		itemAction = ItemFunc $ return . id
+	}
+
 data Tile = Tile {
 		tileType :: TileType,
 		tileContents :: [Item],
@@ -130,8 +137,13 @@ instance Enum Pos where
 			dec n (Pos (0, 0)) = n
 			dec n p = dec (n + 1) (pred p)
 
-tileAt :: Pos -> Level -> Tile
-tileAt (Pos p) (Level lev) = (lev !! (snd p)) !! (fst p)
+tileAt :: Level -> Pos -> Maybe Tile
+tileAt (Level lev) (Pos (x, y)) = let
+		(rows, cols) = (length lev, length (lev !! 0))
+	in
+		case (x >= cols || y >= rows) of
+			True -> Nothing
+			False -> Just $ (lev !! y) !! x
 
 dist :: Pos -> Pos -> Int
 dist (Pos p1) (Pos p2) = floor $ sqrt $ fromIntegral (dx * dx + dy * dy)
@@ -141,38 +153,13 @@ dist (Pos p1) (Pos p2) = floor $ sqrt $ fromIntegral (dx * dx + dy * dy)
 
 type Dungeon = [Level]
 
-data Player = Player {
-		playerPos :: Pos,
+data Game = Game {
+		dungeon :: Dungeon,
 		playerLevel :: Int
 	} deriving (Eq)
 
-instance Show Player where
-	show player = "@"
-
-data Game = Game {
-		dungeon :: Dungeon,
-		player :: Player
-	}
-
 instance Show Game where
-	show g = show $ (dungeon g) !! (playerLevel $ player g)
-
--- Return a point based on p2 that is at least m units away from p1.
---
--- /!\ If m is too large to ever satisfy, infinite recursion will occur. /!\
---
-separate :: Level -> Int -> Pos -> Pos -> IO Pos
-separate (Level lev) m p1 p2 = case dist p1 p2 >= m of
-	False -> return p2
-	True -> do
-		let (rows, cols) = (length lev, length (lev !! 0))
-
-		x <- pick [0 .. cols - 1]
-		y <- pick [0 .. rows - 1]
-
-		p2' <- separate (Level lev) m p1 $ Pos (x, y)
-
-		return p2'
+	show g = show $ (dungeon g) !! (playerLevel g)
 
 putTile :: Level -> Tile -> Pos -> Level
 putTile (Level lev) t (Pos (x, y)) = let
@@ -194,13 +181,51 @@ addStairs (Level lev) s1 s2 = do
 	let p1 = Pos (x1, y1)
 	let p2 = Pos (x2, y2)
 
-	p2' <- separate (Level lev) (cols `div` 3) p1 p2
-
 	let Level lev' = putTile (Level lev) s1 p1
-
-	let Level lev'' = putTile (Level lev') s2 p2'
+	let Level lev'' = putTile (Level lev') s2 p2
 
 	return $ Level lev''
+
+findTile :: (Maybe Tile -> Bool) -> Level -> Maybe Pos
+findTile f (Level lev) = let
+		(rows, cols) = (length lev, length (lev !! 0))
+		matches = filter (f . tileAt (Level lev)) [Pos (0,0) .. Pos (rows - 1, cols - 1)]
+	in
+		case null matches of
+			True -> Nothing
+			False -> Just $ head matches
+
+addPlayer :: Level -> Item -> IO Level
+addPlayer (Level lev) player = do
+	let (rows, cols) = (length lev, length (lev !! 0))
+
+	putStrLn $ "Finding starting position..."
+
+	let startPos = case findTile (== Just defaultUpStair) (Level lev) of
+		Nothing -> Pos (0, 0) -- Will only occur if addStairs is not run beforehand
+		Just p -> p
+
+	putStrLn $ "Starting position: " ++ show startPos
+
+	putStrLn $ "Accessing start tile..."
+
+	let startTile = case tileAt (Level lev) startPos of
+		Nothing -> defaultFloor -- Will only occur if addStairs is not run beforehand
+		Just t -> t
+
+	putStrLn $ "Start tile: " ++ show startTile
+
+	putStrLn $ "Adding player to start tile..."
+
+	let startTile' = startTile { tileContents = player : tileContents startTile}
+
+	putStrLn $ "New start tile: " ++ show startTile'
+
+	putStrLn $ "Reinserting start tile..."
+
+	let lev' =  putTile (Level lev) startTile' startPos
+
+	return lev'
 
 initGame :: IO Game
 initGame = do
@@ -208,20 +233,28 @@ initGame = do
 	let cols = 80
 	let levels = 26
 
-	let lev1 = Level $ replicate rows $ replicate cols defaultWall
+	putStrLn $ "Adding walls..."
 
-	lev1' <- addStairs lev1 defaultUpStair defaultDownStair
+	let lev0 = Level $ replicate rows $ replicate cols defaultWall
 
-	let startPos = head [
-			(Pos (x, y))
-			| Pos (x, y) <- [Pos (0,0) .. Pos (rows - 1, cols - 1)],
-			x < cols &&
-			y < rows &&
-			tileAt (Pos (x, y)) lev1' ==  defaultUpStair
-		]
+	putStrLn $ show lev0
 
-	let p = Player { playerPos = startPos, playerLevel = 0 }
+	putStrLn $ "Adding stairs..."
 
-	let d = replicate levels lev1'
+	lev0' <- addStairs lev0 defaultUpStair defaultDownStair
 
-	return Game { dungeon = d, player = p }
+	putStrLn $ show lev0'
+
+	putStrLn $ "Adding player..."
+
+	lev0'' <- addPlayer lev0' player
+
+	putStrLn $ show lev0''
+
+	putStrLn $ "Adding more levels..."
+
+	let d = lev0'' : replicate (levels - 1) lev0'
+
+	putStrLn $ "Returning game..."
+
+	return Game { dungeon = d, playerLevel = 0 }
