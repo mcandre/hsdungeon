@@ -1,6 +1,6 @@
 #!/usr/bin/env runhaskell
 
-module Rogue where
+module Main where
 
 import Dungeon
 
