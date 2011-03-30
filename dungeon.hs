@@ -13,6 +13,15 @@ pick xs = do
 	r <- randomRIO (0, (length xs - 1))
 	return (xs !! r)
 
+rows :: Int
+rows = 24
+
+cols :: Int
+cols = 80
+
+levels :: Int
+levels = 26
+
 data StairDirection = UpStair | DownStair deriving (Eq)
 
 data Stair = Stair {
@@ -118,6 +127,7 @@ instance Show Level where
 
 data Pos = Pos (Int, Int) deriving (Eq, Ord, Show)
 
+-- cartesian ordering
 instance Enum Pos where
 	succ (Pos (x, y))
 		| y == 0 = Pos (0, x + 1)
@@ -138,12 +148,9 @@ instance Enum Pos where
 			dec n p = dec (n + 1) (pred p)
 
 tileAt :: Level -> Pos -> Maybe Tile
-tileAt (Level lev) (Pos (x, y)) = let
-		(rows, cols) = (length lev, length (lev !! 0))
-	in
-		case (x >= cols || y >= rows) of
-			True -> Nothing
-			False -> Just $ (lev !! y) !! x
+tileAt (Level lev) (Pos (x, y)) = case (x >= cols || y >= rows) of
+	True -> Nothing
+	False -> Just $ (lev !! y) !! x
 
 dist :: Pos -> Pos -> Int
 dist (Pos p1) (Pos p2) = floor $ sqrt $ fromIntegral (dx * dx + dy * dy)
@@ -170,13 +177,11 @@ putTile (Level lev) t (Pos (x, y)) = let
 
 addStairs :: Level -> Tile -> Tile -> IO Level
 addStairs (Level lev) s1 s2 = do
-	let (rows, cols) = (length lev, length (lev !! 0))
-
 	x1 <- pick [0 .. cols - 1]
 	y1 <- pick [0 .. rows - 1]
 
-	x2 <- pick [0 .. cols - 1]
-	y2 <- pick [0 .. rows - 1]
+	x2 <- pick $ [0 .. x1 - 1] ++ [x1 + 1 .. cols - 1]
+	y2 <- pick $ [0 .. y1 - 1] ++ [y1 + 1 .. rows - 1]
 
 	let p1 = Pos (x1, y1)
 	let p2 = Pos (x2, y2)
@@ -186,13 +191,12 @@ addStairs (Level lev) s1 s2 = do
 
 	return $ Level lev''
 
-allPos :: Int -> Int -> [Pos]
-allPos rows cols = [Pos (0,0) .. Pos (rows - 1, cols - 1)]
+allPos :: [Pos]
+allPos = [Pos (0,0) .. Pos (rows - 1, cols - 1)]
 
 findTile :: (Maybe Tile -> Bool) -> Level -> Maybe Pos
 findTile f (Level lev) = let
-		(rows, cols) = (length lev, length (lev !! 0))
-		matches = filter (f . tileAt (Level lev)) $ allPos rows cols
+		matches = filter (f . tileAt (Level lev)) allPos
 	in
 		case null matches of
 			True -> Nothing
@@ -200,8 +204,6 @@ findTile f (Level lev) = let
 
 addPlayer :: Level -> Item -> IO Level
 addPlayer (Level lev) player = do
-	let (rows, cols) = (length lev, length (lev !! 0))
-
 	putStrLn $ "Finding starting position..."
 
 	let startPos = case findTile (== Just defaultUpStair) (Level lev) of
@@ -232,10 +234,6 @@ addPlayer (Level lev) player = do
 
 initGame :: IO Game
 initGame = do
-	let rows = 24
-	let cols = 80
-	let levels = 26
-
 	putStrLn $ "Adding walls..."
 
 	let lev0 = Level $ replicate rows $ replicate cols defaultWall
