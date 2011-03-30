@@ -204,29 +204,15 @@ findTile f (Level lev) = let
 
 addPlayer :: Level -> Item -> IO Level
 addPlayer (Level lev) player = do
-	putStrLn $ "Finding starting position..."
-
 	let startPos = case findTile (== Just defaultUpStair) (Level lev) of
 		Nothing -> Pos (0, 0) -- Will only occur if addStairs is not run beforehand
 		Just p -> p
-
-	putStrLn $ "Starting position: " ++ show startPos
-
-	putStrLn $ "Accessing start tile..."
 
 	let startTile = case tileAt (Level lev) startPos of
 		Nothing -> defaultFloor -- Will only occur if addStairs is not run beforehand
 		Just t -> t
 
-	putStrLn $ "Start tile: " ++ show startTile
-
-	putStrLn $ "Adding player to start tile..."
-
 	let startTile' = startTile { tileContents = player : tileContents startTile}
-
-	putStrLn $ "New start tile: " ++ show startTile'
-
-	putStrLn $ "Reinserting start tile..."
 
 	let lev' =  putTile (Level lev) startTile' startPos
 
@@ -234,28 +220,12 @@ addPlayer (Level lev) player = do
 
 initGame :: IO Game
 initGame = do
-	putStrLn $ "Adding walls..."
-
 	let lev0 = Level $ replicate rows $ replicate cols defaultWall
-
-	putStrLn $ show lev0
-
-	putStrLn $ "Adding stairs..."
 
 	lev0' <- addStairs lev0 defaultUpStair defaultDownStair
 
-	putStrLn $ show lev0'
-
-	putStrLn $ "Adding player..."
-
 	lev0'' <- addPlayer lev0' player
 
-	putStrLn $ show lev0''
-
-	putStrLn $ "Adding more levels..."
-
 	let d = lev0'' : replicate (levels - 1) lev0'
-
-	putStrLn $ "Returning game..."
 
 	return Game { dungeon = d, playerLevel = 0 }
