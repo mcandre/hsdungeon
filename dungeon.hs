@@ -186,10 +186,13 @@ addStairs (Level lev) s1 s2 = do
 
 	return $ Level lev''
 
+allPos :: Int -> Int -> [Pos]
+allPos rows cols = [Pos (0,0) .. Pos (rows - 1, cols - 1)]
+
 findTile :: (Maybe Tile -> Bool) -> Level -> Maybe Pos
 findTile f (Level lev) = let
 		(rows, cols) = (length lev, length (lev !! 0))
-		matches = filter (f . tileAt (Level lev)) [Pos (0,0) .. Pos (rows - 1, cols - 1)]
+		matches = filter (f . tileAt (Level lev)) $ allPos rows cols
 	in
 		case null matches of
 			True -> Nothing
