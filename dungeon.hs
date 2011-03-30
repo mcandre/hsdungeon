@@ -20,10 +20,19 @@ data Stair = Stair {
 		stairLocked :: Bool
 	}
 
+defaultUpStair :: Stair
+defaultUpStair = Stair { stairDirection = UpStair, stairLocked = False }
+
+defaultDownStair :: Stair
+defaultDownStair = Stair { stairDirection = DownStair, stairLocked = False }
+
 data Door = Door {
 		doorClosed :: Bool,
 		doorLocked :: Bool
 	}
+
+defaultDoor :: Door
+defaultDoor = Door { doorClosed = True, doorLocked = False }
 
 data TileType
 	= TileStair Stair
@@ -57,6 +66,9 @@ data Tile = Tile {
 		tileHidden :: Bool
 	}
 
+defaultFloor :: Tile
+defaultFloor = Tile { tileType = TileFloor, tileContents = [], tileHidden = False }
+
 instance Show Tile where
 	show t = case tileHidden t of
 		True -> " "
@@ -64,20 +76,27 @@ instance Show Tile where
 			False -> itemShow $ head $ tileContents t
 			True -> show $ tileType t
 
-defaultFloor :: Tile
-defaultFloor = Tile { tileType = TileFloor, tileContents = [], tileHidden = False }
-
 data Level = Level [[Tile]]
 
 instance Show Level where
 	show (Level level) = intercalate "\n" $ map (intercalate "" . map show) level
 
-type Dungeon = [Level]
-
 type Pos = (Int, Int)
 
+tileAt :: Pos -> Level -> Tile
+tileAt p (Level lev) = (lev !! (snd p)) !! (fst p)
+
+dist :: Pos -> Pos -> Int
+dist p1 p2 = floor $ sqrt $ fromIntegral (dx * dx + dy * dy)
+	where
+		dx = fst p1 - fst p2
+		dy = snd p1 - snd p2
+
+type Dungeon = [Level]
+
 data Player = Player {
-		pos :: Pos
+		playerPos :: Pos,
+		playerLevel :: Int
 	} deriving (Eq)
 
 instance Show Player where
@@ -88,14 +107,15 @@ data Game = Game {
 		player :: Player
 	}
 
-dist :: Pos -> Pos -> Int
-dist p1 p2 = floor $ sqrt $ fromIntegral (dx * dx + dy * dy)
-	where
-		dx = fst p1 - fst p2
-		dy = snd p1 - snd p2
+instance Show Game where
+	show g = show $ (dungeon g) !! (playerLevel $ player g)
 
+-- Return a point based on p2 that is at least m units away from p1.
+--
+-- /!\ If m is too large to ever satisfy, infinite recursion will occur. /!\
+--
 separate :: Level -> Int -> Pos -> Pos -> IO Pos
-separate (Level lev) m p1 p2 = case dist p1 p2 < m of
+separate (Level lev) m p1 p2 = case dist p1 p2 >= m of
 	False -> return p2
 	True -> do
 		let (rows, cols) = (length lev, length (lev !! 0))
@@ -107,8 +127,13 @@ separate (Level lev) m p1 p2 = case dist p1 p2 < m of
 
 		return p2'
 
--- putTile :: Level -> Tile -> Pos -> Level
--- putTile (Level lev) t p = -- ...
+putTile :: Level -> Tile -> Pos -> Level
+putTile (Level lev) t p = let
+		(x, y) = p
+		(rowsBefore, rowsCur:rowsAfter) = splitAt y lev
+		(colsBefore, colsCur:colsAfter) = splitAt x rowsCur
+	in
+		Level $ rowsBefore ++ [colsBefore ++ [t] ++ colsAfter] ++ rowsAfter
 
 addStairs :: Level -> Stair -> Stair -> IO Level
 addStairs (Level lev) s1 s2 = do
@@ -125,11 +150,11 @@ addStairs (Level lev) s1 s2 = do
 
 	p2' <- separate (Level lev) (cols `div` 3) p1 p2
 
-	let lev' = [[defaultFloor]]
+	let Level lev' = putTile (Level lev) (Tile { tileType = TileStair s1, tileContents = [], tileHidden = False }) p1
 
-	-- ...
+	let Level lev'' = putTile (Level lev') (Tile { tileType = TileStair s2, tileContents = [], tileHidden = False }) p2'
 
-	return $ Level lev'
+	return $ Level lev''
 
 initGame :: IO Game
 initGame = do
@@ -137,7 +162,12 @@ initGame = do
 	let cols = 80
 	let levels = 26
 
-	let d = replicate levels $ Level $ replicate rows $ replicate cols defaultFloor
-	let p = Player { pos = (0, 0) }
+	let lev1 = Level $ replicate rows $ replicate cols defaultFloor
+
+	lev1' <- addStairs lev1 defaultUpStair defaultDownStair
+
+	let d = replicate levels lev1'
+
+	let p = Player { playerPos = (0, 0), playerLevel = 0 }
 
 	return Game { dungeon = d, player = p }
