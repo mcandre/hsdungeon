@@ -13,33 +13,24 @@ pick xs = do
 	r <- randomRIO (0, (length xs - 1))
 	return (xs !! r)
 
-data StairDirection = UpStair | DownStair
+data StairDirection = UpStair | DownStair deriving (Eq)
 
 data Stair = Stair {
 		stairDirection :: StairDirection,
 		stairLocked :: Bool
-	}
-
-defaultUpStair :: Stair
-defaultUpStair = Stair { stairDirection = UpStair, stairLocked = False }
-
-defaultDownStair :: Stair
-defaultDownStair = Stair { stairDirection = DownStair, stairLocked = False }
+	} deriving (Eq)
 
 data Door = Door {
 		doorClosed :: Bool,
 		doorLocked :: Bool
-	}
-
-defaultDoor :: Door
-defaultDoor = Door { doorClosed = True, doorLocked = False }
+	} deriving (Eq)
 
 data TileType
 	= TileStair Stair
 	| TileEmpty
 	| TileFloor
 	| TileWall
-	| TileDoor Door
+	| TileDoor Door deriving (Eq)
 
 instance Show TileType where
 	show (TileStair stair) = case stairDirection stair of
@@ -54,20 +45,57 @@ instance Show TileType where
 		True -> "+"
 		False -> "/"
 
+data ItemFunc = ItemFunc (Game -> IO Game)
+
+instance Eq ItemFunc where
+	ItemFunc x == ItemFunc y = True
+
 data Item = Item {
 		itemName :: String,
 		itemShow :: String,
-		itemAction :: Game -> IO Game
-	}
+		itemAction :: ItemFunc
+	} deriving (Eq)
 
 data Tile = Tile {
 		tileType :: TileType,
 		tileContents :: [Item],
 		tileHidden :: Bool
+	} deriving (Eq)
+
+defaultUpStair :: Tile
+defaultUpStair = Tile {
+		tileType = TileStair $ Stair { stairDirection = UpStair, stairLocked = False },
+		tileContents = [],
+		tileHidden = False
+	}
+
+defaultDownStair :: Tile
+defaultDownStair = Tile {
+		tileType = TileStair $ Stair { stairDirection = DownStair, stairLocked = False },
+		tileContents = [],
+		tileHidden = False
+	}
+
+defaultDoor :: Tile
+defaultDoor = Tile {
+		tileType = TileDoor $ Door { doorClosed = True, doorLocked = False },
+		tileContents = [],
+		tileHidden = False
 	}
 
 defaultFloor :: Tile
-defaultFloor = Tile { tileType = TileFloor, tileContents = [], tileHidden = False }
+defaultFloor = Tile {
+		tileType = TileFloor,
+		tileContents = [],
+		tileHidden = False
+	}
+
+defaultWall :: Tile
+defaultWall = Tile {
+		tileType = TileWall,
+		tileContents = [],
+		tileHidden = False
+	}
 
 instance Show Tile where
 	show t = case tileHidden t of
@@ -76,18 +104,37 @@ instance Show Tile where
 			False -> itemShow $ head $ tileContents t
 			True -> show $ tileType t
 
-data Level = Level [[Tile]]
+data Level = Level [[Tile]] deriving (Eq)
 
 instance Show Level where
 	show (Level level) = intercalate "\n" $ map (intercalate "" . map show) level
 
-type Pos = (Int, Int)
+data Pos = Pos (Int, Int) deriving (Eq, Ord, Show)
+
+instance Enum Pos where
+	succ (Pos (x, y))
+		| y == 0 = Pos (0, x + 1)
+		| otherwise = Pos (x + 1, y - 1)
+
+	pred (Pos (x, y))
+		| x == 0 = Pos (y - 1, 0)
+		| otherwise = Pos (x - 1, y + 1)
+
+	toEnum i = acc i (Pos (0, 0))
+		where
+			acc 0 p = p
+			acc n p = acc (n - 1) (succ p)
+	
+	fromEnum p = dec 0 p
+		where
+			dec n (Pos (0, 0)) = n
+			dec n p = dec (n + 1) (pred p)
 
 tileAt :: Pos -> Level -> Tile
-tileAt p (Level lev) = (lev !! (snd p)) !! (fst p)
+tileAt (Pos p) (Level lev) = (lev !! (snd p)) !! (fst p)
 
 dist :: Pos -> Pos -> Int
-dist p1 p2 = floor $ sqrt $ fromIntegral (dx * dx + dy * dy)
+dist (Pos p1) (Pos p2) = floor $ sqrt $ fromIntegral (dx * dx + dy * dy)
 	where
 		dx = fst p1 - fst p2
 		dy = snd p1 - snd p2
@@ -123,36 +170,35 @@ separate (Level lev) m p1 p2 = case dist p1 p2 >= m of
 		x <- pick [0 .. cols - 1]
 		y <- pick [0 .. rows - 1]
 
-		p2' <- separate (Level lev) m p1 (x, y)
+		p2' <- separate (Level lev) m p1 $ Pos (x, y)
 
 		return p2'
 
 putTile :: Level -> Tile -> Pos -> Level
-putTile (Level lev) t p = let
-		(x, y) = p
+putTile (Level lev) t (Pos (x, y)) = let
 		(rowsBefore, rowsCur:rowsAfter) = splitAt y lev
 		(colsBefore, colsCur:colsAfter) = splitAt x rowsCur
 	in
 		Level $ rowsBefore ++ [colsBefore ++ [t] ++ colsAfter] ++ rowsAfter
 
-addStairs :: Level -> Stair -> Stair -> IO Level
+addStairs :: Level -> Tile -> Tile -> IO Level
 addStairs (Level lev) s1 s2 = do
 	let (rows, cols) = (length lev, length (lev !! 0))
 
-	p1X <- pick [0 .. cols - 1]
-	p1Y <- pick [0 .. rows - 1]
+	x1 <- pick [0 .. cols - 1]
+	y1 <- pick [0 .. rows - 1]
 
-	p2X <- pick [0 .. cols - 1]
-	p2Y <- pick [0 .. rows - 1]
+	x2 <- pick [0 .. cols - 1]
+	y2 <- pick [0 .. rows - 1]
 
-	let p1 = (p1X, p1Y)
-	let p2 = (p2X, p2Y)
+	let p1 = Pos (x1, y1)
+	let p2 = Pos (x2, y2)
 
 	p2' <- separate (Level lev) (cols `div` 3) p1 p2
 
-	let Level lev' = putTile (Level lev) (Tile { tileType = TileStair s1, tileContents = [], tileHidden = False }) p1
+	let Level lev' = putTile (Level lev) s1 p1
 
-	let Level lev'' = putTile (Level lev') (Tile { tileType = TileStair s2, tileContents = [], tileHidden = False }) p2'
+	let Level lev'' = putTile (Level lev') s2 p2'
 
 	return $ Level lev''
 
@@ -162,12 +208,20 @@ initGame = do
 	let cols = 80
 	let levels = 26
 
-	let lev1 = Level $ replicate rows $ replicate cols defaultFloor
+	let lev1 = Level $ replicate rows $ replicate cols defaultWall
 
 	lev1' <- addStairs lev1 defaultUpStair defaultDownStair
 
-	let d = replicate levels lev1'
+	let startPos = head [
+			(Pos (x, y))
+			| Pos (x, y) <- [Pos (0,0) .. Pos (rows - 1, cols - 1)],
+			x < cols &&
+			y < rows &&
+			tileAt (Pos (x, y)) lev1' ==  defaultUpStair
+		]
 
-	let p = Player { playerPos = (0, 0), playerLevel = 0 }
+	let p = Player { playerPos = startPos, playerLevel = 0 }
+
+	let d = replicate levels lev1'
 
 	return Game { dungeon = d, player = p }
