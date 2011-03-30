@@ -21,11 +21,17 @@ drawGame g = do
 	mapM (\row -> mvWAddStr stdScr row 0 (rowStrings !! row)) [0 .. rows - 1]
 	refresh
 
+act :: Game -> Key -> IO Game
+act g k = do
+	-- ...
+	return g
+
 loopGame :: Game -> IO ()
 loopGame g = do
-	-- ...
-
-	loopGame g
+	drawGame g
+	c <- getCh
+	g' <- act g c
+	loopGame g'
 
 main :: IO ()
 main = do
@@ -35,11 +41,9 @@ main = do
 	cBreak True
 	cursSet CursorInvisible
 	echo False
-	-- nl False
+	nl False
 
 	g <- initGame
-
-	drawGame g
 
 	loopGame g
 
