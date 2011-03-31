@@ -4,6 +4,7 @@
 
 module Dungeon where
 
+import Data.Set (fromList, toList, difference)
 import Data.List (intercalate)
 
 import Random (randomRIO)
@@ -147,10 +148,8 @@ instance Enum Pos where
 			dec n (Pos (0, 0)) = n
 			dec n p = dec (n + 1) (pred p)
 
-tileAt :: Level -> Pos -> Maybe Tile
-tileAt (Level lev) (Pos (x, y)) = case (x >= cols || y >= rows) of
-	True -> Nothing
-	False -> Just $ (lev !! y) !! x
+tileAt :: Level -> Pos -> Tile
+tileAt (Level lev) (Pos (x, y)) = (lev !! y) !! x
 
 dist :: Pos -> Pos -> Int
 dist (Pos p1) (Pos p2) = floor $ sqrt $ fromIntegral (dx * dx + dy * dy)
@@ -162,11 +161,17 @@ type Dungeon = [Level]
 
 data Game = Game {
 		dungeon :: Dungeon,
-		playerLevel :: Int
+		playerLevel :: Int,
+		playerPos :: Pos
 	} deriving (Eq)
 
 instance Show Game where
-	show g = show $ (dungeon g) !! (playerLevel g)
+	show g = let
+			lev = (dungeon g) !! (playerLevel g)
+			pPos = playerPos g
+			lev' = putItem lev player pPos
+		in
+			show lev'
 
 putTile :: Level -> Tile -> Pos -> Level
 putTile (Level lev) t (Pos (x, y)) = let
@@ -175,57 +180,87 @@ putTile (Level lev) t (Pos (x, y)) = let
 	in
 		Level $ rowsBefore ++ [colsBefore ++ [t] ++ colsAfter] ++ rowsAfter
 
-addStairs :: Level -> Tile -> Tile -> IO Level
-addStairs (Level lev) s1 s2 = do
-	x1 <- pick [0 .. cols - 1]
-	y1 <- pick [0 .. rows - 1]
+putItem :: Level -> Item -> Pos -> Level
+putItem (Level lev) i (Pos (x, y)) = let
+		t = tileAt (Level lev) (Pos (x, y))
+		t' = t { tileContents = i : tileContents t }
+	in
+		putTile (Level lev) t' (Pos (x, y))
 
-	x2 <- pick $ [0 .. x1 - 1] ++ [x1 + 1 .. cols - 1]
-	y2 <- pick $ [0 .. y1 - 1] ++ [y1 + 1 .. rows - 1]
+randomPos :: [Int] -> [Int] -> IO Pos
+randomPos colBounds rowBounds= do
+	x <- pick colBounds
+	y <- pick rowBounds
+	return $ Pos (x, y)
 
-	let p1 = Pos (x1, y1)
-	let p2 = Pos (x2, y2)
+makeStairs :: Level -> IO (Pos, Pos)
+makeStairs (Level lev) = do
+	let colBounds = [0 .. cols - 1]
+	let rowBounds = [0 .. rows - 1]
 
-	let Level lev' = putTile (Level lev) s1 p1
-	let Level lev'' = putTile (Level lev') s2 p2
+	Pos (x1, y1) <- randomPos colBounds rowBounds
 
-	return $ Level lev''
+	-- Ensure stairs do not overlap
+	let colBounds' = (toList . flip difference (fromList [x1]) . fromList) colBounds
+	let rowBounds' = (toList . flip difference (fromList [y1]) . fromList) rowBounds
+
+	Pos (x2, y2) <- randomPos colBounds' rowBounds'
+
+	return (Pos (x1, y1), Pos (x2, y2))
 
 allPos :: [Pos]
 allPos = [Pos (0,0) .. Pos (rows - 1, cols - 1)]
 
-findTile :: (Maybe Tile -> Bool) -> Level -> Maybe Pos
-findTile f (Level lev) = let
-		matches = filter (f . tileAt (Level lev)) allPos
+findTile :: (Tile -> Bool) -> Level -> Pos
+findTile f (Level lev) = head $ filter (f . tileAt (Level lev)) allPos
+
+moveUp :: Game -> Game
+moveUp g = let
+		Pos (x, y) = playerPos g
+		p' = case y > 0 of
+			False -> Pos (x, y)
+			True -> Pos (x, y - 1)
+		g' = g { playerPos = p' }
 	in
-		case null matches of
-			True -> Nothing
-			False -> Just $ head matches
+		g'
 
-addPlayer :: Level -> Item -> IO Level
-addPlayer (Level lev) player = do
-	let startPos = case findTile (== Just defaultUpStair) (Level lev) of
-		Nothing -> Pos (0, 0) -- Will only occur if addStairs is not run beforehand
-		Just p -> p
+moveDown :: Game -> Game
+moveDown g = let
+		Pos (x, y) = playerPos g
+		p' = case y < rows - 1 of
+			False -> Pos (x, y)
+			True -> Pos (x, y + 1)
+		g' = g { playerPos = p' }
+	in
+		g'
 
-	let startTile = case tileAt (Level lev) startPos of
-		Nothing -> defaultFloor -- Will only occur if addStairs is not run beforehand
-		Just t -> t
+moveLeft :: Game -> Game
+moveLeft g = let
+		Pos (x, y) = playerPos g
+		p' = case x < 0 of
+			False -> Pos (x, y)
+			True -> Pos (x - 1, y)
+		g' = g { playerPos = p' }
+	in
+		g'
 
-	let startTile' = startTile { tileContents = player : tileContents startTile}
-
-	let lev' =  putTile (Level lev) startTile' startPos
-
-	return lev'
+moveRight :: Game -> Game
+moveRight g = let
+		Pos (x, y) = playerPos g
+		p' = case x < cols - 1 of
+			False -> Pos (x, y)
+			True -> Pos (x + 1, y)
+		g' = g { playerPos = p' }
+	in
+		g'
 
 initGame :: IO Game
 initGame = do
-	let lev0 = Level $ replicate rows $ replicate cols defaultWall
+	let lev = Level $ replicate rows $ replicate cols defaultWall
 
-	lev0' <- addStairs lev0 defaultUpStair defaultDownStair
+	(s1Pos, s2Pos) <- makeStairs lev
 
-	lev0'' <- addPlayer lev0' player
+	let lev' = putTile lev defaultUpStair s1Pos
+	let lev'' = putTile lev' defaultDownStair s2Pos
 
-	let d = lev0'' : replicate (levels - 1) lev0'
-
-	return Game { dungeon = d, playerLevel = 0 }
+	return Game { dungeon = [lev''], playerLevel = 0, playerPos = s1Pos }

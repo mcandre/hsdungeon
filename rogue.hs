@@ -10,11 +10,7 @@ import Dungeon
 
 drawGame :: Game -> IO ()
 drawGame g = do
-	let lev = (dungeon g) !! (playerLevel g)
-	let levString = show lev
-
-	-- putStrLn levString
-
+	let levString = show g
 	let rowStrings = unintercalate "\n" levString
 	
 	wclear stdScr
@@ -23,8 +19,16 @@ drawGame g = do
 
 act :: Game -> Key -> IO Game
 act g k = do
-	-- ...
-	return g
+	-- putStrLn $ "Key: " ++ show k
+
+	let g' = case k of
+		cKEY_UP -> moveUp g
+		cKEY_DOWN -> moveDown g
+		cKEY_LEFT -> moveLeft g
+		cKEY_RIGHT -> moveRight g
+		otherwise -> g
+
+	return g'
 
 loopGame :: Game -> IO ()
 loopGame g = do

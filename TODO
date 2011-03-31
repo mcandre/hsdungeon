@@ -1,8 +1,8 @@
-Speed up findTile
-
-Add curses interface
-
 Add keyboard input
+
+Add Dijkstra
+
+Add movement constraints
 
 Add monsters
 
