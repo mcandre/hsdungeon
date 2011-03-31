@@ -2,53 +2,59 @@
 
 module Main where
 
-import UI.HSCurses.Curses
+import UI.NCurses
 import Control.Exception (handle, AsyncException(UserInterrupt))
 import Control.Monad (when)
 import Data.List.Split (unintercalate)
+import Data.Text (pack)
 import Dungeon
 
-drawGame :: Game -> IO ()
-drawGame g = do
+drawRow :: Window -> Int -> String -> IO ()
+drawRow w r s = do
+	updateWindow w $ moveCursor (fromIntegral r) 0
+	updateWindow w $ (drawText . pack) s
+
+drawGame :: Window -> Game -> IO ()
+drawGame w g = do
 	let levString = show g
 	let rowStrings = unintercalate "\n" levString
-	
-	wclear stdScr
-	mapM (\row -> mvWAddStr stdScr row 0 (rowStrings !! row)) [0 .. rows - 1]
-	refresh
 
-act :: Game -> Key -> IO Game
-act g k = do
-	-- putStrLn $ "Key: " ++ show k
+	mapM (\row -> drawRow w row (rowStrings !! row)) [0 .. rows - 1]
+	render
 
-	let g' = case k of
-		cKEY_UP -> moveUp g
-		cKEY_DOWN -> moveDown g
-		cKEY_LEFT -> moveLeft g
-		cKEY_RIGHT -> moveRight g
-		otherwise -> g
+act :: Game -> (Maybe Event) -> IO Game
+act g e = do
+	let g' = case e of
+		Nothing -> g
+		EventCharacter k -> case k of
+			KeyUpArrow -> moveUp g
+			KeyDownArrow -> moveDown g
+			KeyLeftArrow -> moveLeft g
+			KeyRightArrow -> moveRight g
+			otherwise -> g
 
 	return g'
 
-loopGame :: Game -> IO ()
-loopGame g = do
-	drawGame g
-	c <- getCh
-	g' <- act g c
+loopGame :: Window -> Game -> IO ()
+loopGame w g = do
+	drawGame w g
+	e <- getEvent w Nothing
+	g' <- act g e
 	loopGame g'
 
 main :: IO ()
 main = do
-	handle (\e -> when (e == UserInterrupt) endWin) $ do
+	runCurses
+	w <- defaultWindow
 
-	initCurses
-	cBreak True
-	cursSet CursorInvisible
-	echo False
-	nl False
+	handle (\e -> when (e == UserInterrupt) closeWindow w) $ do
+		runCurses
+		setCBreak True
+		setAttribute AttributeInvisible
+		setEcho False
 
-	g <- initGame
+		g <- initGame
 
-	loopGame g
+		loopGame w g
 
-	endWin
+		closeWindow w
