@@ -1,7 +1,7 @@
 EXECUTABLE=rogue
 
 all: rogue.hs dungeon.hs
-	ghc --make -o $(EXECUTABLE) -package hscurses -package split -package containers rogue.hs
+	ghc --make -o $(EXECUTABLE) -package ncurses -package split -package containers rogue.hs
 
 clean:
 	rm $(EXECUTABLE)

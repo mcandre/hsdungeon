@@ -148,8 +148,8 @@ instance Enum Pos where
 			dec n (Pos (0, 0)) = n
 			dec n p = dec (n + 1) (pred p)
 
-tileAt :: Level -> Pos -> Tile
-tileAt (Level lev) (Pos (x, y)) = (lev !! y) !! x
+getTile :: Level -> Pos -> Tile
+getTile (Level lev) (Pos (x, y)) = (lev !! y) !! x
 
 dist :: Pos -> Pos -> Int
 dist (Pos p1) (Pos p2) = floor $ sqrt $ fromIntegral (dx * dx + dy * dy)
@@ -182,7 +182,7 @@ putTile (Level lev) t (Pos (x, y)) = let
 
 putItem :: Level -> Item -> Pos -> Level
 putItem (Level lev) i (Pos (x, y)) = let
-		t = tileAt (Level lev) (Pos (x, y))
+		t = getTile (Level lev) (Pos (x, y))
 		t' = t { tileContents = i : tileContents t }
 	in
 		putTile (Level lev) t' (Pos (x, y))
@@ -212,7 +212,7 @@ allPos :: [Pos]
 allPos = [Pos (0,0) .. Pos (rows - 1, cols - 1)]
 
 findTile :: (Tile -> Bool) -> Level -> Pos
-findTile f (Level lev) = head $ filter (f . tileAt (Level lev)) allPos
+findTile f (Level lev) = head $ filter (f . getTile (Level lev)) allPos
 
 moveUp :: Game -> Game
 moveUp g = let

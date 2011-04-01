@@ -5,16 +5,17 @@ module Main where
 import UI.NCurses
 import Control.Exception (handle, AsyncException(UserInterrupt))
 import Control.Monad (when)
+import Control.Monad.IO.Class (liftIO)
 import Data.List.Split (unintercalate)
 import Data.Text (pack)
 import Dungeon
 
-drawRow :: Window -> Int -> String -> IO ()
+drawRow :: Window -> Int -> String -> Curses ()
 drawRow w r s = do
 	updateWindow w $ moveCursor (fromIntegral r) 0
 	updateWindow w $ (drawText . pack) s
 
-drawGame :: Window -> Game -> IO ()
+drawGame :: Window -> Game -> Curses ()
 drawGame w g = do
 	let levString = show g
 	let rowStrings = unintercalate "\n" levString
@@ -22,38 +23,36 @@ drawGame w g = do
 	mapM (\row -> drawRow w row (rowStrings !! row)) [0 .. rows - 1]
 	render
 
-act :: Game -> (Maybe Event) -> IO Game
-act g e = do
-	let g' = case e of
-		Nothing -> g
-		EventCharacter k -> case k of
-			KeyUpArrow -> moveUp g
-			KeyDownArrow -> moveDown g
-			KeyLeftArrow -> moveLeft g
-			KeyRightArrow -> moveRight g
-			otherwise -> g
+act :: Game -> Event -> Curses Game
+act g e = return g'
+	where
+	g' = case e of
+		-- EventCharacter 'q' -> return g
+		EventSpecialKey KeyUpArrow -> moveUp g
+		EventSpecialKey KeyDownArrow -> moveDown g
+		EventSpecialKey KeyLeftArrow -> moveLeft g
+		EventSpecialKey KeyRightArrow -> moveRight g
+		otherwise -> g
 
-	return g'
-
-loopGame :: Window -> Game -> IO ()
+loopGame :: Window -> Game -> Curses ()
 loopGame w g = do
 	drawGame w g
-	e <- getEvent w Nothing
-	g' <- act g e
-	loopGame g'
+	me <- getEvent w Nothing
+
+	g' <- case me of
+		Nothing -> return g
+		Just e -> act g e
+
+	loopGame w g'
 
 main :: IO ()
-main = do
-	runCurses
-	w <- defaultWindow
+main = runCurses $ do
+		w <- defaultWindow
 
-	handle (\e -> when (e == UserInterrupt) closeWindow w) $ do
-		runCurses
 		setCBreak True
-		setAttribute AttributeInvisible
 		setEcho False
 
-		g <- initGame
+		g <- liftIO initGame
 
 		loopGame w g
 
