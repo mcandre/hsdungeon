@@ -11,7 +11,7 @@ import Random (randomRIO)
 
 pick :: [a] -> IO a
 pick xs = do
-	r <- randomRIO (0, (length xs - 1))
+	r <- randomRIO (0, length xs - 1)
 	return (xs !! r)
 
 rows :: Int
