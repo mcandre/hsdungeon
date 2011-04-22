@@ -124,7 +124,7 @@ instance Show Tile where
 data Level = Level [[Tile]] deriving (Eq)
 
 instance Show Level where
-	show (Level level) = intercalate "\n" $ map (intercalate "" . map show) level
+	show (Level level) = unlines $ map (intercalate "" . map show) level
 
 data Pos = Pos (Int, Int) deriving (Eq, Ord, Show)
 
