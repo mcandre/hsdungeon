@@ -10,9 +10,7 @@ import Data.List (intercalate)
 import Random (randomRIO)
 
 pick :: [a] -> IO a
-pick xs = do
-	r <- randomRIO (0, length xs - 1)
-	return (xs !! r)
+pick xs = (randomRIO (0, length xs - 1)) >>= (return . (xs !!))
 
 rows :: Int
 rows = 24
